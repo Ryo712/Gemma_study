@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="AI幹事受付 - 管理用ダッシュボード">
+  <title>幹事ダッシュボード - 飲み会受付管理</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="logo">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2z"/>
+        <path d="M12 6v6l4 2"/>
+      </svg>
+      Nomikai AI Receptionist
+    </div>
+  </header>
+
+  <main>
+    <!-- 1. Password Verification Gate -->
+    <div class="glass-panel admin-auth-card" id="authPanel">
+      <h1 class="panel-title">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+        ダッシュボード認証
+      </h1>
+      <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 20px;">
+        イベント作成時に設定した管理用パスワードを入力してください。
+      </p>
+      <form id="loginForm">
+        <div class="form-group">
+          <label for="adminPassword">パスワード</label>
+          <input type="password" id="adminPassword" required placeholder="管理用パスワード">
+        </div>
+        <button type="submit" class="btn" style="width: 100%; margin-top: 10px;">認証する</button>
+      </form>
+    </div>
+
+    <!-- 2. Main Dashboard content -->
+    <div class="dashboard-layout" id="dashboardPanel" style="display: none;">
+      
+      <!-- Top Overview Panel -->
+      <div class="glass-panel" style="max-width: 100%; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 20px; align-items: center; padding: 30px;">
+        <div>
+          <h1 id="eventTitle" style="font-size: 1.8rem; font-weight: 700; margin-bottom: 5px;">イベント名</h1>
+          <p id="eventSummaryText" style="color: var(--text-secondary); font-size: 0.9rem;"></p>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <button id="exportCsvBtn" class="btn btn-secondary">
+            📥 CSVエクスポート
+          </button>
+          <a href="index.html" class="btn">新しいイベント作成</a>
+        </div>
+      </div>
+
+      <!-- Statistics Grid -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <label>回答数</label>
+          <div class="stat-num" id="statTotal">0</div>
+        </div>
+        <div class="stat-card">
+          <label>参加人数</label>
+          <div class="stat-num attending" id="statAttending">0</div>
+        </div>
+        <div class="stat-card">
+          <label>不参加人数</label>
+          <div class="stat-num absent" id="statAbsent">0</div>
+        </div>
+        <div class="stat-card">
+          <label>定員充足率</label>
+          <div class="stat-num" id="statCapacity">0%</div>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 350px 1fr; gap: 30px; align-items: start;">
+        
+        <!-- Left: Date Preference Tally -->
+        <div class="glass-panel" style="max-width: 100%; padding: 25px;">
+          <h2 style="font-size: 1.1rem; font-weight: 600; margin-bottom: 15px;">🗓️ 希望日程集計 (参加希望)</h2>
+          <div class="date-tally-list" id="dateTallyList">
+            <!-- Tally items will be rendered here -->
+          </div>
+        </div>
+
+        <!-- Right: Participant Table -->
+        <div class="glass-panel" style="max-width: 100%; padding: 25px;">
+          <h2 style="font-size: 1.1rem; font-weight: 600; margin-bottom: 15px;">👥 参加予定者一覧</h2>
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>名前</th>
+                  <th>参加状況</th>
+                  <th>希望日程</th>
+                  <th>要望・備考・アレルギー</th>
+                  <th>回答日時</th>
+                </tr>
+              </thead>
+              <tbody id="participantTableBody">
+                <!-- Rows will be rendered here -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const eventId = urlParams.get('id');
+
+    const authPanel = document.getElementById('authPanel');
+    const dashboardPanel = document.getElementById('dashboardPanel');
+    const loginForm = document.getElementById('loginForm');
+    const adminPasswordInput = document.getElementById('adminPassword');
+
+    let cachedParticipants = [];
+
+    // On page load, check if password is saved in sessionStorage
+    const storedPassword = sessionStorage.getItem(`admin_pw_${eventId}`);
+    if (eventId && storedPassword) {
+      verifyPasswordAndLoad(storedPassword);
+    } else if (!eventId) {
+      alert('イベントIDが見つかりません。');
+      window.location.href = 'index.html';
+    }
+
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const pw = adminPasswordInput.value;
+      verifyPasswordAndLoad(pw);
+    });
+
+    async function verifyPasswordAndLoad(pw) {
+      try {
+        const res = await fetch(`/api/admin/${eventId}/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: pw })
+        });
+
+        if (!res.ok) {
+          throw new Error('パスワードが正しくありません。');
+        }
+
+        // Save password in session
+        sessionStorage.setItem(`admin_pw_${eventId}`, pw);
+        
+        // Load data
+        loadDashboardData(pw);
+      } catch (err) {
+        alert(err.message || '認証に失敗しました。');
+        sessionStorage.removeItem(`admin_pw_${eventId}`);
+      }
+    }
+
+    async function loadDashboardData(pw) {
+      try {
+        const res = await fetch(`/api/admin/${eventId}/dashboard`, {
+          headers: {
+            'x-admin-password': pw
+          }
+        });
+
+        if (!res.ok) {
+          throw new Error('データの取得に失敗しました。');
+        }
+
+        const data = await res.json();
+        
+        authPanel.style.display = 'none';
+        dashboardPanel.style.display = 'block';
+
+        renderDashboard(data);
+      } catch (err) {
+        alert(err.message);
+        authPanel.style.display = 'block';
+        dashboardPanel.style.display = 'none';
+      }
+    }
+
+    function renderDashboard(data) {
+      const event = data.event;
+      const stats = data.stats;
+      const participants = data.participants;
+      cachedParticipants = participants;
+
+      // Event Info Summary text
+      document.getElementById('eventTitle').innerText = event.name;
+      document.getElementById('eventSummaryText').innerText = `場所: ${event.location || '未定'}  |  会費: ${event.fee ? event.fee.toLocaleString() + '円' : '未定'}  |  定員: ${event.capacity ? event.capacity + '人' : '制限なし'}`;
+
+      // Stats
+      document.getElementById('statTotal').innerText = stats.total;
+      document.getElementById('statAttending').innerText = stats.attending;
+      document.getElementById('statAbsent').innerText = stats.absent;
+
+      // Capacity Fill Rate
+      if (event.capacity) {
+        const fillRate = Math.round((stats.attending / event.capacity) * 100);
+        document.getElementById('statCapacity').innerText = `${fillRate}% (${stats.attending}/${event.capacity}人)`;
+        if (stats.attending >= event.capacity) {
+          document.getElementById('statCapacity').style.color = 'var(--danger-color)';
+        } else {
+          document.getElementById('statCapacity').style.color = '';
+        }
+      } else {
+        document.getElementById('statCapacity').innerText = '制限なし';
+      }
+
+      // Render Tally Chart (CSS Width variable transitions)
+      const tallyContainer = document.getElementById('dateTallyList');
+      tallyContainer.innerHTML = '';
+      
+      const maxVotes = Math.max(...Object.values(stats.dateDistribution), 1);
+
+      event.candidate_dates.forEach(date => {
+        const votes = stats.dateDistribution[date] || 0;
+        const percentage = Math.round((votes / maxVotes) * 100);
+
+        const tallyItem = document.createElement('div');
+        tallyItem.className = 'tally-item';
+        tallyItem.innerHTML = `
+          <div class="tally-header">
+            <span>${date}</span>
+            <strong>${votes}人</strong>
+          </div>
+          <div class="tally-bar-container">
+            <div class="tally-bar" style="width: ${percentage}%"></div>
+          </div>
+        `;
+        tallyContainer.appendChild(tallyItem);
+      });
+
+      // Render Participants Table
+      const tableBody = document.getElementById('participantTableBody');
+      tableBody.innerHTML = '';
+
+      if (participants.length === 0) {
+        tableBody.innerHTML = `
+          <tr>
+            <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 40px;">
+              参加者がまだ登録していません。
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      participants.forEach(p => {
+        const tr = document.createElement('tr');
+        
+        let statusBadge = '';
+        if (p.status === 'attending') {
+          statusBadge = '<span class="badge attending">参加</span>';
+        } else if (p.status === 'absent') {
+          statusBadge = '<span class="badge absent">不参加</span>';
+        } else {
+          statusBadge = '<span class="badge undecided">保留</span>';
+        }
+
+        const dateStr = new Date(p.created_at).toLocaleString('ja-JP', {
+          month: 'numeric',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+
+        tr.innerHTML = `
+          <td><strong>${escapeHtml(p.name)}</strong></td>
+          <td>${statusBadge}</td>
+          <td>${escapeHtml(p.selected_date) || '-'}</td>
+          <td style="max-width: 300px; overflow-wrap: break-word;">${escapeHtml(p.notes) || '<span style="color: var(--text-muted)">なし</span>'}</td>
+          <td style="font-size: 0.8rem; color: var(--text-secondary);">${dateStr}</td>
+        `;
+        tableBody.appendChild(tr);
+      });
+    }
+
+    function escapeHtml(string) {
+      if (!string) return '';
+      return string.replace(/&/g, '&amp;')
+                   .replace(/</g, '&lt;')
+                   .replace(/>/g, '&gt;')
+                   .replace(/"/g, '&quot;')
+                   .replace(/'/g, '&#039;');
+    }
+
+    // Export CSV logic (handles Japanese encoding for Excel with BOM)
+    document.getElementById('exportCsvBtn').addEventListener('click', () => {
+      if (cachedParticipants.length === 0) {
+        alert('出力するデータがありません。');
+        return;
+      }
+
+      const headers = ['名前', 'ステータス', '希望日程', '備考・アレルギー', '回答日時'];
+      const rows = cachedParticipants.map(p => [
+        p.name,
+        p.status === 'attending' ? '参加' : '不参加',
+        p.selected_date || '',
+        p.notes || '',
+        new Date(p.created_at).toLocaleString('ja-JP')
+      ]);
+
+      // Prepend UTF-8 BOM to prevent garbling in Excel
+      const bom = '\uFEFF';
+      const csvContent = bom + [
+        headers.join(','),
+        ...rows.map(r => r.map(val => `"${val.replace(/"/g, '""')}"`).join(','))
+      ].join('\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `rsvp_list_${eventId}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    });
+  </script>
+</body>
+</html>

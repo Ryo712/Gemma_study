@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="AI幹事受付 - イベント参加登録チャット">
+  <title>飲み会参加登録 - AIチャット受付</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="logo">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2z"/>
+        <path d="M12 6v6l4 2"/>
+      </svg>
+      Nomikai AI Receptionist
+    </div>
+  </header>
+
+  <main>
+    <!-- Event Details + Chat side-by-side -->
+    <div class="chat-layout" id="mainLayout" style="display: none;">
+      
+      <!-- Left side: Event Info Card -->
+      <div class="glass-panel event-info-panel">
+        <h2 id="eventTitle" style="font-size: 1.4rem; font-weight: 700; margin-bottom: 10px;">イベント情報</h2>
+        <p id="eventStatus" style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 20px;">
+          現在の参加予定人数: <strong id="attendeesCount" style="color: var(--success-color)">0</strong>人
+        </p>
+
+        <div class="event-details">
+          <div class="detail-item">
+            <div class="detail-icon">📍</div>
+            <div class="detail-content">
+              <div class="detail-label">場所</div>
+              <div class="detail-value" id="infoLocation">未定</div>
+            </div>
+          </div>
+
+          <div class="detail-item">
+            <div class="detail-icon">¥</div>
+            <div class="detail-content">
+              <div class="detail-label">会費 / 予算</div>
+              <div class="detail-value" id="infoFee">0円</div>
+            </div>
+          </div>
+
+          <div class="detail-item">
+            <div class="detail-icon">👥</div>
+            <div class="detail-content">
+              <div class="detail-label">定員</div>
+              <div class="detail-value" id="infoCapacity">制限なし</div>
+            </div>
+          </div>
+
+          <div class="detail-item">
+            <div class="detail-icon">📅</div>
+            <div class="detail-content">
+              <div class="detail-label">候補日時一覧</div>
+              <div class="detail-value" id="infoDates">
+                <!-- Badges will be inserted here -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right side: AI Chat Container -->
+      <div class="glass-panel chat-panel">
+        <div class="chat-header">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div class="ai-avatar">🤖</div>
+            <div class="ai-status">
+              <span class="ai-name">受付AIアシスタント</span>
+              <span class="ai-tagline">オンライン受付中</span>
+            </div>
+          </div>
+          <button type="button" id="ttsToggleBtn" class="tts-toggle-btn" title="読み上げのオン/オフ">
+            <span id="ttsIcon">🔇</span>
+            <span id="ttsLabel">読み上げ: OFF</span>
+          </button>
+        </div>
+
+        <div class="chat-messages" id="chatMessages">
+          <!-- Messages dynamically appended here -->
+        </div>
+
+        <!-- Typing Indicator -->
+        <div class="chat-messages" id="typingIndicatorContainer" style="display: none; padding: 0 24px; min-height: 50px;">
+          <div class="message ai">
+            <div class="ai-avatar">🤖</div>
+            <div class="message-bubble typing-bubble">
+              <div class="typing-dot"></div>
+              <div class="typing-dot"></div>
+              <div class="typing-dot"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="chat-input-area">
+          <form id="chatForm" class="chat-form">
+            <input type="text" id="chatInput" class="chat-input" placeholder="AIにメッセージを送る..." required autocomplete="off">
+            <button type="button" id="micBtn" class="chat-mic-btn" title="音声入力">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                <path d="M19 10v1a7 7 0 0 1-14 0v-1"/>
+                <line x1="12" y1="19" x2="12" y2="23"/>
+                <line x1="8" y1="23" x2="16" y2="23"/>
+              </svg>
+            </button>
+            <button type="submit" class="chat-send-btn" id="sendBtn" title="送信">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <line x1="22" y1="2" x2="11" y2="13"/>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+              </svg>
+            </button>
+          </form>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Error State -->
+    <div class="glass-panel text-center" id="errorPanel" style="display: none;">
+      <h2 style="color: var(--danger-color); margin-bottom: 12px;">エラー</h2>
+      <p id="errorMessage">イベントIDが無効であるか、見つかりません。</p>
+      <a href="index.html" class="btn btn-secondary" style="margin-top: 20px;">トップに戻る</a>
+    </div>
+  </main>
+
+  <!-- Modern Success Dialog with closedby="any" -->
+  <dialog id="successDialog" closedby="any" aria-labelledby="dialogTitle">
+    <div class="dialog-content">
+      <div class="success-icon">✓</div>
+      <h2 id="dialogTitle" style="margin-top: 10px;">登録が完了しました！</h2>
+      <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 20px;">
+        AIによる参加登録手続きが正常に完了しました。幹事へ登録内容を送信しました。
+      </p>
+      
+      <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--panel-border); border-radius: var(--radius-md); padding: 15px; width: 100%; text-align: left; font-size: 0.9rem; margin-bottom: 20px;">
+        <div>👤 <strong>名前:</strong> <span id="summaryName">-</span></div>
+        <div style="margin-top: 8px;">📅 <strong>希望日:</strong> <span id="summaryDate">-</span></div>
+        <div style="margin-top: 8px;">📊 <strong>区分:</strong> <span id="summaryStatus">-</span></div>
+        <div style="margin-top: 8px;">📝 <strong>備考:</strong> <span id="summaryNotes">-</span></div>
+      </div>
+
+      <button onclick="document.getElementById('successDialog').close()" class="btn" style="width: 100%;">
+        閉じる
+      </button>
+    </div>
+  </dialog>
+
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const eventId = urlParams.get('id');
+    
+    const mainLayout = document.getElementById('mainLayout');
+    const errorPanel = document.getElementById('errorPanel');
+    const errorMessage = document.getElementById('errorMessage');
+
+    let eventData = null;
+    let chatHistory = [];
+
+    // Voice integration states
+    let ttsEnabled = localStorage.getItem('tts_enabled') === 'true';
+    const ttsToggleBtn = document.getElementById('ttsToggleBtn');
+    const ttsIcon = document.getElementById('ttsIcon');
+    const ttsLabel = document.getElementById('ttsLabel');
+    const micBtn = document.getElementById('micBtn');
+
+    // Check event ID
+    if (!eventId) {
+      showError('イベントIDが指定されていません。URLを確認してください。');
+    } else {
+      loadEvent();
+    }
+
+    async function loadEvent() {
+      try {
+        const res = await fetch(`/api/events/${eventId}`);
+        if (!res.ok) {
+          throw new Error('イベント情報の取得に失敗しました。');
+        }
+        eventData = await res.json();
+        renderEventDetails();
+        initChat();
+      } catch (err) {
+        showError('指定されたイベントが見つかりません。削除されたか、URLが正しくない可能性があります。');
+      }
+    }
+
+    function showError(msg) {
+      errorMessage.innerText = msg;
+      errorPanel.style.display = 'block';
+      mainLayout.style.display = 'none';
+    }
+
+    function renderEventDetails() {
+      document.getElementById('eventTitle').innerText = eventData.name;
+      document.getElementById('infoLocation').innerText = eventData.location || '未定';
+      document.getElementById('infoFee').innerText = eventData.fee ? `${eventData.fee.toLocaleString()}円` : '未定';
+      document.getElementById('infoCapacity').innerText = eventData.capacity ? `${eventData.capacity}人` : '制限なし';
+      document.getElementById('attendeesCount').innerText = eventData.current_attendees;
+
+      const datesContainer = document.getElementById('infoDates');
+      datesContainer.innerHTML = '';
+      eventData.candidate_dates.forEach(date => {
+        const badge = document.createElement('span');
+        badge.className = 'date-badge';
+        badge.innerText = date;
+        datesContainer.appendChild(badge);
+      });
+
+      mainLayout.style.display = 'grid';
+    }
+
+    // Chat logic
+    const chatMessages = document.getElementById('chatMessages');
+    const typingIndicator = document.getElementById('typingIndicatorContainer');
+    const chatForm = document.getElementById('chatForm');
+    const chatInput = document.getElementById('chatInput');
+    const sendBtn = document.getElementById('sendBtn');
+
+    function appendMessage(role, content) {
+      const msgDiv = document.createElement('div');
+      msgDiv.className = `message ${role === 'user' ? 'user' : 'ai'}`;
+      
+      const avatar = document.createElement('div');
+      avatar.className = role === 'user' ? '' : 'ai-avatar';
+      avatar.innerText = role === 'user' ? '' : '🤖';
+
+      const bubble = document.createElement('div');
+      bubble.className = 'message-bubble';
+      bubble.innerText = content;
+
+      if (role !== 'user') {
+        msgDiv.appendChild(avatar);
+      }
+      msgDiv.appendChild(bubble);
+      chatMessages.appendChild(msgDiv);
+      
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function initChat() {
+      const welcome = `こんにちは！イベント「${eventData.name}」の受付AIアシスタントです。
+
+参加・不参加のご登録を受付いたします。
+日程候補は [ ${eventData.candidate_dates.join(', ')} ] となっております。
+
+まずは、あなたのお名前（ニックネームでも可能）を教えていただけますでしょうか？`;
+      
+      chatHistory.push({ role: 'assistant', content: welcome });
+      appendMessage('assistant', welcome);
+      
+      // Auto read welcome message (if browser permissions allow user interaction first)
+      speakText(welcome);
+    }
+
+    // Modular Message Submission
+    async function handleUserMessage(text) {
+      if (!text) return;
+
+      // Cancel any ongoing voice synthesis immediately
+      window.speechSynthesis.cancel();
+
+      chatInput.value = '';
+      chatInput.disabled = true;
+      sendBtn.disabled = true;
+      if (micBtn) micBtn.disabled = true;
+      
+      appendMessage('user', text);
+      chatHistory.push({ role: 'user', content: text });
+
+      typingIndicator.style.display = 'block';
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+
+      try {
+        const res = await fetch(`/api/rsvp/${eventId}/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messages: chatHistory })
+        });
+
+        if (!res.ok) {
+          throw new Error();
+        }
+
+        const data = await res.json();
+        
+        typingIndicator.style.display = 'none';
+
+        appendMessage('assistant', data.reply);
+        chatHistory.push({ role: 'assistant', content: data.reply });
+
+        // Trigger Speech Synthesis (TTS)
+        speakText(data.reply);
+
+        if (data.registrationComplete && data.registration) {
+          showSuccessModal(data.registration);
+        } else {
+          chatInput.disabled = false;
+          sendBtn.disabled = false;
+          if (micBtn) micBtn.disabled = false;
+          chatInput.focus();
+        }
+      } catch (err) {
+        typingIndicator.style.display = 'none';
+        appendMessage('assistant', '申し訳ありません、サーバーとの通信エラーが発生しました。しばらくしてから再度入力してください。');
+        chatInput.disabled = false;
+        sendBtn.disabled = false;
+        if (micBtn) micBtn.disabled = false;
+        chatInput.focus();
+      }
+    }
+
+    // --- 日本語IME変換中のEnter誤送信を防止 ---
+    // compositionstart: IME変換開始（かな入力など）
+    // compositionend:   IME変換確定（スペース・Enterで候補確定）
+    // submit イベントは compositionend の後に発火するため、
+    // composing フラグで変換中かどうかを追跡して送信をガードする
+    let isComposing = false;
+    chatInput.addEventListener('compositionstart', () => { isComposing = true; });
+    chatInput.addEventListener('compositionend', () => { isComposing = false; });
+
+    chatForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (isComposing) return; // IME確定Enterは送信しない
+      const text = chatInput.value.trim();
+      handleUserMessage(text);
+    });
+
+    function showSuccessModal(reg) {
+      document.getElementById('summaryName').innerText = reg.name || 'ゲスト';
+      document.getElementById('summaryDate').innerText = reg.selected_date || '未定 / なし';
+      document.getElementById('summaryStatus').innerText = reg.status === 'attending' ? '参加 🎉' : '不参加 ✉️';
+      document.getElementById('summaryNotes').innerText = reg.notes || 'なし';
+
+      const dialog = document.getElementById('successDialog');
+      dialog.showModal();
+
+      // Disable inputs permanently
+      chatInput.disabled = true;
+      chatInput.placeholder = '登録完了しました';
+      sendBtn.disabled = true;
+      if (micBtn) {
+        micBtn.disabled = true;
+        micBtn.style.opacity = '0.5';
+      }
+
+      if (reg.status === 'attending') {
+        const countEl = document.getElementById('attendeesCount');
+        countEl.innerText = parseInt(countEl.innerText, 10) + 1;
+      }
+    }
+
+    // Text to Speech (TTS) Logic
+    function updateTtsUI() {
+      if (ttsEnabled) {
+        ttsToggleBtn.classList.add('active');
+        ttsIcon.innerText = '🔊';
+        ttsLabel.innerText = '読み上げ: ON';
+      } else {
+        ttsToggleBtn.classList.remove('active');
+        ttsIcon.innerText = '🔇';
+        ttsLabel.innerText = '読み上げ: OFF';
+      }
+    }
+
+    function speakText(text) {
+      if (!ttsEnabled) return;
+      
+      // Stop anything currently speaking
+      window.speechSynthesis.cancel();
+
+      // Remove markdown chars and system JSON symbols for cleaner reading
+      const cleaned = text
+        .replace(/[*#`_\-]/g, '')
+        .replace(/\[REGISTRATION_DATA\][\s\S]*?\[\/REGISTRATION_DATA\]/g, '')
+        .trim();
+
+      if (!cleaned) return;
+
+      const utterance = new SpeechSynthesisUtterance(cleaned);
+      utterance.lang = 'ja-JP';
+      
+      // Attempt speaking
+      window.speechSynthesis.speak(utterance);
+    }
+
+    // Initial setup of TTS button
+    updateTtsUI();
+    ttsToggleBtn.addEventListener('click', () => {
+      ttsEnabled = !ttsEnabled;
+      localStorage.setItem('tts_enabled', ttsEnabled);
+      updateTtsUI();
+      if (!ttsEnabled) {
+        window.speechSynthesis.cancel();
+      }
+    });
+
+    // Speech-to-Text (STT) Logic
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition = null;
+    let isRecording = false;
+
+    if (!SpeechRecognition) {
+      // Hide mic button if browser does not support Speech Recognition
+      if (micBtn) micBtn.style.display = 'none';
+      console.log('Web Speech API (SpeechRecognition) is not supported in this browser.');
+    } else {
+      recognition = new SpeechRecognition();
+      recognition.lang = 'ja-JP';
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => {
+        isRecording = true;
+        micBtn.classList.add('recording');
+        chatInput.placeholder = '聞き取り中... お話しください';
+        chatInput.disabled = true;
+        sendBtn.disabled = true;
+      };
+
+      recognition.onend = () => {
+        isRecording = false;
+        micBtn.classList.remove('recording');
+        chatInput.placeholder = 'AIにメッセージを送る...';
+        chatInput.disabled = false;
+        sendBtn.disabled = false;
+      };
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        if (transcript) {
+          chatInput.value = transcript;
+          handleUserMessage(transcript);
+        }
+      };
+
+      recognition.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+        recognition.stop();
+      };
+
+      micBtn.addEventListener('click', () => {
+        window.speechSynthesis.cancel(); // Stop AI voice if user begins recording
+        if (isRecording) {
+          recognition.stop();
+        } else {
+          recognition.start();
+        }
+      });
+    }
+
+    // Dialog light-dismiss fallback for unsupported browsers
+    const dialog = document.getElementById('successDialog');
+    if (!('closedBy' in HTMLDialogElement.prototype)) {
+      dialog.addEventListener('click', (event) => {
+        if (event.target !== dialog) return;
+        const rect = dialog.getBoundingClientRect();
+        const isDialogContent = (
+          rect.top <= event.clientY &&
+          event.clientY <= rect.top + rect.height &&
+          rect.left <= event.clientX &&
+          event.clientX <= rect.left + rect.width
+        );
+        if (isDialogContent) return;
+        dialog.close();
+      });
+    }
+  </script>
+</body>
+</html>

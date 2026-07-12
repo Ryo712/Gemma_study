@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="AI幹事受付システム。簡単登録、日程調整もAIチャットにおまかせ。">
+  <title>飲み会幹事AI受付システム - 新規イベント作成</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="logo">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2z"/>
+        <path d="M12 6v6l4 2"/>
+      </svg>
+      Nomikai AI Receptionist
+    </div>
+    <div class="logo-sub">面倒な飲み会の出席回収と日程調整を、AIがチャットで自動で行います</div>
+  </header>
+
+  <main>
+    <div class="glass-panel" id="creationPanel">
+      <h1 class="panel-title">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 5v14M5 12h14"/>
+        </svg>
+        イベントを新規作成
+      </h1>
+      
+      <form id="createEventForm">
+        <div class="form-group">
+          <label for="eventName">イベント名 <span style="color: var(--danger-color)">*</span></label>
+          <input type="text" id="eventName" required placeholder="例: 開発チーム決起集会">
+        </div>
+
+        <div class="form-group">
+          <label>候補日時 <span style="color: var(--danger-color)">*</span></label>
+          <div id="dateInputsContainer">
+            <div class="date-item">
+              <input type="text" class="candidate-date-input" required placeholder="例: 7月10日(金) 19:00〜">
+              <button type="button" class="btn btn-secondary btn-small remove-date-btn" style="visibility: hidden;">削除</button>
+            </div>
+          </div>
+          <button type="button" id="addDateBtn" class="btn btn-secondary btn-small" style="margin-top: 8px; width: fit-content;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M12 5v14M5 12h14"/>
+            </svg>
+            日時を追加
+          </button>
+        </div>
+
+        <div class="form-group">
+          <label for="eventLocation">開催場所</label>
+          <input type="text" id="eventLocation" placeholder="例: 渋谷付近の居酒屋 / 未定の場合は空欄">
+        </div>
+
+        <div class="form-group" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+          <div>
+            <label for="eventFee">会費 (円)</label>
+            <input type="number" id="eventFee" min="0" placeholder="例: 5000">
+          </div>
+          <div>
+            <label for="eventCapacity">定員 (人)</label>
+            <input type="number" id="eventCapacity" min="1" placeholder="例: 15">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="adminPassword">管理用パスワード <span style="color: var(--danger-color)">*</span></label>
+          <input type="password" id="adminPassword" required placeholder="集計ダッシュボードへのアクセスに使用します">
+        </div>
+
+        <button type="submit" id="submitBtn" class="btn" style="width: 100%; margin-top: 10px;">
+          イベントを作成してURLを発行する
+        </button>
+      </form>
+
+      <!-- Created Event Output Box -->
+      <div id="resultBox" class="result-box" style="display: none;">
+        <h3 style="color: var(--success-color); display: flex; align-items: center; gap: 8px;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+            <polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+          イベントを作成しました！
+        </h3>
+        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 8px;">
+          以下のリンクを参加者へ共有し、管理用リンクをブックマークしてください。
+        </p>
+        
+        <div class="link-group">
+          <label>👥 参加者用チャット調整URL</label>
+          <div class="copy-input-container">
+            <input type="text" id="rsvpUrlInput" class="copy-input" readonly>
+            <button type="button" id="copyRsvpBtn" class="btn btn-secondary btn-small">コピー</button>
+          </div>
+        </div>
+
+        <div class="link-group" style="margin-top: 15px;">
+          <label>📊 幹事用ダッシュボードURL (パスワード制限あり)</label>
+          <div class="copy-input-container">
+            <input type="text" id="dashboardUrlInput" class="copy-input" readonly>
+            <button type="button" id="copyDashboardBtn" class="btn btn-secondary btn-small">コピー</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // Handle dynamic date candidates fields
+    const container = document.getElementById('dateInputsContainer');
+    const addDateBtn = document.getElementById('addDateBtn');
+
+    function updateRemoveButtonsVisibility() {
+      const items = container.querySelectorAll('.date-item');
+      items.forEach((item, index) => {
+        const removeBtn = item.querySelector('.remove-date-btn');
+        if (items.length > 1) {
+          removeBtn.style.visibility = 'visible';
+        } else {
+          removeBtn.style.visibility = 'hidden';
+        }
+      });
+    }
+
+    addDateBtn.addEventListener('click', () => {
+      const div = document.createElement('div');
+      div.className = 'date-item';
+      div.innerHTML = `
+        <input type="text" class="candidate-date-input" required placeholder="例: 7月11日(土) 19:00〜">
+        <button type="button" class="btn btn-secondary btn-small remove-date-btn">削除</button>
+      `;
+      container.appendChild(div);
+      
+      div.querySelector('.remove-date-btn').addEventListener('click', () => {
+        div.remove();
+        updateRemoveButtonsVisibility();
+      });
+      updateRemoveButtonsVisibility();
+    });
+
+    // Handle standard submit event
+    const form = document.getElementById('createEventForm');
+    const submitBtn = document.getElementById('submitBtn');
+    const resultBox = document.getElementById('resultBox');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      submitBtn.disabled = true;
+      submitBtn.innerText = '作成中...';
+
+      const candidateDates = Array.from(document.querySelectorAll('.candidate-date-input')).map(input => input.value.trim());
+
+      const payload = {
+        name: document.getElementById('eventName').value.trim(),
+        candidateDates,
+        location: document.getElementById('eventLocation').value.trim(),
+        fee: document.getElementById('eventFee').value,
+        capacity: document.getElementById('eventCapacity').value,
+        password: document.getElementById('adminPassword').value
+      };
+
+      try {
+        const res = await fetch('/api/events', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+          throw new Error('サーバーエラーが発生しました。');
+        }
+
+        const data = await res.json();
+        if (data.success && data.eventId) {
+          const origin = window.location.origin;
+          const rsvpUrl = `${origin}/rsvp.html?id=${data.eventId}`;
+          const dashboardUrl = `${origin}/admin.html?id=${data.eventId}`;
+
+          document.getElementById('rsvpUrlInput').value = rsvpUrl;
+          document.getElementById('dashboardUrlInput').value = dashboardUrl;
+          
+          resultBox.style.display = 'block';
+          form.style.opacity = '0.3';
+          form.querySelectorAll('input, button').forEach(el => el.disabled = true);
+          submitBtn.innerText = '作成完了';
+        }
+      } catch (err) {
+        alert(err.message || 'イベントの作成に失敗しました。');
+        submitBtn.disabled = false;
+        submitBtn.innerText = 'イベントを作成してURLを発行する';
+      }
+    });
+
+    // Copy helper
+    function setupCopy(btnId, inputId) {
+      const btn = document.getElementById(btnId);
+      const input = document.getElementById(inputId);
+      btn.addEventListener('click', () => {
+        input.select();
+        document.execCommand('copy');
+        const origText = btn.innerText;
+        btn.innerText = 'コピー済!';
+        btn.style.background = 'var(--success-color)';
+        setTimeout(() => {
+          btn.innerText = origText;
+          btn.style.background = '';
+        }, 1500);
+      });
+    }
+
+    setupCopy('copyRsvpBtn', 'rsvpUrlInput');
+    setupCopy('copyDashboardBtn', 'dashboardUrlInput');
+  </script>
+</body>
+</html>
